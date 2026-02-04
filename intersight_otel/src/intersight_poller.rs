@@ -52,6 +52,52 @@ fn get_aggregator_for_config(config: &PollerConfig) -> Result<Box<dyn Aggregator
         "count_results" => Ok(Box::new(generic_poller::ResultCountingAggregator::new(
             config.name.clone(),
         ))),
+        "first_result_field" => {
+            // Parse fields from aggregator_options
+            let fields: Vec<String> = config
+                .aggregator_options
+                .as_ref()
+                .and_then(|opts| opts.get("fields"))
+                .map(|f| f.split(',').map(|s| s.trim().to_string()).collect())
+                .unwrap_or_default();
+
+            if fields.is_empty() {
+                bail!("first_result_field aggregator requires 'fields' in aggregator_options");
+            }
+
+            Ok(Box::new(generic_poller::FirstResultFieldAggregator::new(
+                config.name.clone(),
+                fields,
+            )))
+        }
+        "first_result_numeric" => {
+            // Extract a numeric field from first result as the metric value
+            let field = config
+                .aggregator_options
+                .as_ref()
+                .and_then(|opts| opts.get("field"))
+                .cloned()
+                .unwrap_or_default();
+
+            if field.is_empty() {
+                bail!("first_result_numeric aggregator requires 'field' in aggregator_options");
+            }
+
+            let divisor: f64 = config
+                .aggregator_options
+                .as_ref()
+                .and_then(|opts| opts.get("divisor"))
+                .and_then(|d| d.parse().ok())
+                .unwrap_or(1.0);
+
+            Ok(Box::new(
+                generic_poller::FirstResultNumericFieldAggregator::new(
+                    config.name.clone(),
+                    field,
+                    divisor,
+                ),
+            ))
+        }
         _ => bail!(format!("Invalid aggregator {}", config.aggregator)),
     }
 }
